@@ -1,0 +1,17 @@
+---
+- name: Simulate memory utilization safely
+  hosts: lab
+  gather_facts: false
+  vars:
+    allow_simulation: false
+  tasks:
+    - name: Require explicit lab opt-in
+      ansible.builtin.assert:
+        that:
+          - allow_simulation | bool
+          - inventory_hostname in groups['lab']
+        fail_msg: "Blocked: simulations may run only on hosts in the lab group with allow_simulation=true."
+
+    - name: Simulation integration point
+      ansible.builtin.debug:
+        msg: "Generate controlled memory pressure only on an isolated lab host."
