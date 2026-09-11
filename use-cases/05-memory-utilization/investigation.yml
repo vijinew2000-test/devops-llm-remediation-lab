@@ -1,0 +1,19 @@
+---
+- name: Investigate memory utilization
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Collect memory utilization evidence
+      ansible.builtin.shell: |
+        set -o pipefail
+        free -m && ps -eo pid,ppid,user,comm,%mem,rss --sort=-%mem | head -n 16
+      args:
+        executable: /bin/bash
+      register: investigation
+      changed_when: false
+      failed_when: false
+
+    - name: Show sanitized evidence
+      ansible.builtin.debug:
+        var: investigation.stdout_lines
