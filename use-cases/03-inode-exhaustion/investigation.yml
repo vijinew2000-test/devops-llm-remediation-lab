@@ -1,0 +1,19 @@
+---
+- name: Investigate inode exhaustion
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Collect inode exhaustion evidence
+      ansible.builtin.shell: |
+        set -o pipefail
+        df -Pi && find /var/tmp -xdev -type f 2>/dev/null | head -n 1000 | wc -l
+      args:
+        executable: /bin/bash
+      register: investigation
+      changed_when: false
+      failed_when: false
+
+    - name: Show sanitized evidence
+      ansible.builtin.debug:
+        var: investigation.stdout_lines
