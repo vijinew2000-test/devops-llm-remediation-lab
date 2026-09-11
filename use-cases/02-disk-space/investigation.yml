@@ -1,0 +1,19 @@
+---
+- name: Investigate disk space
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Collect disk space evidence
+      ansible.builtin.shell: |
+        set -o pipefail
+        df -PTh && du -x -d 1 /var 2>/dev/null | sort -n | tail -n 15
+      args:
+        executable: /bin/bash
+      register: investigation
+      changed_when: false
+      failed_when: false
+
+    - name: Show sanitized evidence
+      ansible.builtin.debug:
+        var: investigation.stdout_lines
