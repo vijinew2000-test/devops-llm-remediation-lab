@@ -1,0 +1,17 @@
+---
+- name: Approved high cpu remediation
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    allow_remediation: false
+  tasks:
+    - name: Require explicit human approval
+      ansible.builtin.assert:
+        that:
+          - allow_remediation | bool
+        fail_msg: "Blocked: set allow_remediation=true only after reviewing the target and rollback plan."
+
+    - name: Remediation integration point
+      ansible.builtin.debug:
+        msg: "Reduce CPU usage only through a reviewed role or service-specific action."
