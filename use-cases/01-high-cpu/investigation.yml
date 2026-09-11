@@ -1,0 +1,19 @@
+---
+- name: Investigate high cpu
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Collect high cpu evidence
+      ansible.builtin.shell: |
+        set -o pipefail
+        ps -eo pid,ppid,user,comm,%cpu,%mem --sort=-%cpu | head -n 16
+      args:
+        executable: /bin/bash
+      register: investigation
+      changed_when: false
+      failed_when: false
+
+    - name: Show sanitized evidence
+      ansible.builtin.debug:
+        var: investigation.stdout_lines
