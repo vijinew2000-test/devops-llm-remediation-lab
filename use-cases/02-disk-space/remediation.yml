@@ -1,0 +1,17 @@
+---
+- name: Approved disk space remediation
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    allow_remediation: false
+  tasks:
+    - name: Require explicit human approval
+      ansible.builtin.assert:
+        that:
+          - allow_remediation | bool
+        fail_msg: "Blocked: set allow_remediation=true only after reviewing the target and rollback plan."
+
+    - name: Remediation integration point
+      ansible.builtin.debug:
+        msg: "Perform only an approved cleanup role with retention and rollback requirements."
