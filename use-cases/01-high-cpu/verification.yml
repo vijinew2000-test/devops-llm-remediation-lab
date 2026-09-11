@@ -1,0 +1,19 @@
+---
+- name: Verify high cpu remediation
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Collect verification evidence
+      ansible.builtin.shell: |
+        set -o pipefail
+        ps -eo pid,ppid,user,comm,%cpu,%mem --sort=-%cpu | head -n 16
+      args:
+        executable: /bin/bash
+      register: verification
+      changed_when: false
+
+    - name: Show result
+      ansible.builtin.debug:
+        msg:
+          - "Re-run the process snapshot and confirm CPU has returned below the agreed threshold."
+          - "{{ verification.stdout_lines }}"
