@@ -1,0 +1,26 @@
+---
+- name: Perform approved swap remediation
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    allow_remediation: false
+    approved_remediation_action: "none"
+
+  tasks:
+    - name: Require explicit human approval
+      ansible.builtin.assert:
+        that:
+          - allow_remediation | bool
+          - approved_remediation_action != "none"
+        fail_msg: >-
+          Blocked: review available RAM, active swap I/O, affected processes,
+          application impact, and rollback plan before enabling remediation.
+
+    - name: Approved remediation integration point
+      ansible.builtin.debug:
+        msg:
+          - "Approved action: {{ approved_remediation_action }}"
+          - "Use a reviewed role for the affected application or memory setting."
+          - "Do not run swapoff automatically; it may exhaust RAM and crash the host."
