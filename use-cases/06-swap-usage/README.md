@@ -21,6 +21,7 @@ Swap being used does not automatically mean the server has a current problem. Ch
 
 ## What symptoms indicate problematic swap usage?
 Resource symptoms
+
 High swap utilization
 Increasing swap usage
 Low available RAM
