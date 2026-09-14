@@ -1,0 +1,30 @@
+---
+- name: Prepare a controlled file descriptor simulation
+  hosts: lab
+  gather_facts: true
+
+  vars:
+    allow_simulation: false
+    simulation_descriptor_count: 64
+    simulation_duration_seconds: 60
+
+  tasks:
+    - name: Require explicit lab opt-in and bounded parameters
+      ansible.builtin.assert:
+        that:
+          - allow_simulation | bool
+          - inventory_hostname in groups['lab']
+          - simulation_descriptor_count | int > 0
+          - simulation_descriptor_count | int <= 128
+          - simulation_duration_seconds | int > 0
+          - simulation_duration_seconds | int <= 120
+        fail_msg: >-
+          Blocked: run only on an isolated host in the lab group. The simulation
+          is limited to 128 descriptors for no more than 120 seconds.
+
+    - name: Show the reviewed simulation parameters
+      ansible.builtin.debug:
+        msg:
+          - "Descriptors: {{ simulation_descriptor_count }}"
+          - "Duration: {{ simulation_duration_seconds }} seconds"
+          - "Simulation execution is intentionally left for a reviewed lab role."
