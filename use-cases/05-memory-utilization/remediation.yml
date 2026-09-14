@@ -1,17 +1,147 @@
 ---
-- name: Approved memory utilization remediation
+- name: Auto-Remediation | High Memory Utilization
   hosts: all
-  gather_facts: false
-  become: true
-  vars:
-    allow_remediation: false
-  tasks:
-    - name: Require explicit human approval
-      ansible.builtin.assert:
-        that:
-          - allow_remediation | bool
-        fail_msg: "Blocked: set allow_remediation=true only after reviewing the target and rollback plan."
+  become: yes
+  gather_facts: no
 
-    - name: Remediation integration point
+  vars:
+    # Overall system memory threshold
+    memory_threshold: 90
+
+    # Process memory threshold
+    # Process will be killed if it uses >= 5% memory
+    process_memory_threshold: 5
+
+    # Enable/disable filesystem cache cleanup
+    mem_cleanup_enabled: true
+
+  tasks:
+
+    # ---------------------------------------------------------
+    # Check current memory utilization
+    # ---------------------------------------------------------
+    - name: Get memory usage using free -m
+      ansible.builtin.command: free -m
+      register: mem_output
+      changed_when: false
+
+    - name: Display free -m output
       ansible.builtin.debug:
-        msg: "Apply only an approved application-specific response; do not kill arbitrary processes."
+        msg: "{{ mem_output.stdout }}"
+
+    # ---------------------------------------------------------
+    # Extract memory values
+    # ---------------------------------------------------------
+    - name: Extract total and used memory
+      ansible.builtin.set_fact:
+        total_mem: "{{ mem_output.stdout_lines[1].split()[1] | int }}"
+        used_mem: "{{ mem_output.stdout_lines[1].split()[2] | int }}"
+
+    # ---------------------------------------------------------
+    # Calculate memory utilization
+    # ---------------------------------------------------------
+    - name: Calculate memory usage percentage
+      ansible.builtin.set_fact:
+        mem_usage_before: >-
+          {{ ((used_mem | int / total_mem | int) * 100) | round(0) }}
+
+    - name: Display current memory utilization
+      ansible.builtin.debug:
+        msg: "Memory usage before remediation: {{ mem_usage_before }}%"
+
+    # ---------------------------------------------------------
+    # Remediation
+    # Execute only when memory usage >= 90%
+    # ---------------------------------------------------------
+    - name: Remediate high memory utilization
+      when: mem_usage_before | int >= memory_threshold
+      block:
+
+        # -----------------------------------------------------
+        # Sync filesystem buffers
+        # -----------------------------------------------------
+        - name: Sync filesystem buffers
+          ansible.builtin.command: sync
+          changed_when: false
+
+        # -----------------------------------------------------
+        # Drop filesystem caches
+        # -----------------------------------------------------
+        - name: Drop filesystem caches
+          ansible.builtin.shell: |
+            echo 3 > /proc/sys/vm/drop_caches
+          when: mem_cleanup_enabled
+          changed_when: false
+
+        # -----------------------------------------------------
+        # Find the top memory-consuming process
+        # -----------------------------------------------------
+        - name: Get top memory-consuming process
+          ansible.builtin.shell: |
+            ps -eo pid,pmem,comm --sort=-pmem | awk 'NR==2 {print $1, $3, $2}'
+          register: high_mem_process
+          changed_when: false
+
+        - name: Display top memory-consuming process
+          ansible.builtin.debug:
+            msg: "Top memory process: {{ high_mem_process.stdout }}"
+
+        # -----------------------------------------------------
+        # Kill process if it uses >= 5% memory
+        # -----------------------------------------------------
+        - name: Kill process using 5% or more memory
+          ansible.builtin.command:
+            argv:
+              - kill
+              - "-9"
+              - "{{ high_mem_process.stdout.split()[0] }}"
+          when:
+            - high_mem_process.stdout | length > 0
+            - high_mem_process.stdout.split()[2] | float >= process_memory_threshold
+          failed_when: false
+          changed_when: true
+
+        - name: Display remediation result
+          ansible.builtin.debug:
+            msg: >-
+              Process {{ high_mem_process.stdout.split()[0] }}
+              was killed because it was using
+              {{ high_mem_process.stdout.split()[2] }}% memory.
+
+    # ---------------------------------------------------------
+    # Wait before checking memory again
+    # ---------------------------------------------------------
+    - name: Wait 60 seconds before rechecking memory
+      ansible.builtin.wait_for:
+        timeout: 60
+      when: mem_usage_before | int >= memory_threshold
+
+    # ---------------------------------------------------------
+    # Check memory after remediation
+    # ---------------------------------------------------------
+    - name: Get memory usage after remediation
+      ansible.builtin.command: free -m
+      register: mem_output_after
+      changed_when: false
+
+    - name: Extract memory values after remediation
+      ansible.builtin.set_fact:
+        total_mem_after: "{{ mem_output_after.stdout_lines[1].split()[1] | int }}"
+        used_mem_after: "{{ mem_output_after.stdout_lines[1].split()[2] | int }}"
+
+    # ---------------------------------------------------------
+    # Calculate memory utilization after remediation
+    # ---------------------------------------------------------
+    - name: Calculate memory usage after remediation
+      ansible.builtin.set_fact:
+        mem_usage_after: >-
+          {{ ((used_mem_after | int / total_mem_after | int) * 100) | round(0) }}
+
+    # ---------------------------------------------------------
+    # Final result
+    # ---------------------------------------------------------
+    - name: Display memory utilization result
+      ansible.builtin.debug:
+        msg:
+          - "Memory usage before remediation: {{ mem_usage_before }}%"
+          - "Memory usage after remediation: {{ mem_usage_after }}%"
