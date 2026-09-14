@@ -18,3 +18,33 @@ Simulation is disabled by default and must run only on an isolated lab host.
 ## Important note
 
 Swap being used does not automatically mean the server has a current problem. Check available memory, swap-in/swap-out activity, application health, and historical trends before remediation.
+
+## What symptoms indicate problematic swap usage?
+Resource symptoms
+High swap utilization
+Increasing swap usage
+Low available RAM
+High memory utilization
+High swap-in/swap-out activity
+Application symptoms
+
+Applications may become:
+
+slow
+intermittently unresponsive
+slow to start
+slow to respond to requests
+System symptoms
+
+You may see:
+
+High disk I/O
+High iowait
+System sluggishness
+Processes spending more time waiting
+
+In severe cases:
+
+OOM events
+Services getting killed
+Application failures
