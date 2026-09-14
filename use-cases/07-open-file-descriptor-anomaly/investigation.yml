@@ -1,0 +1,36 @@
+---
+- name: Investigate open file descriptor anomaly
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Collect system and per-process descriptor evidence
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "=== SYSTEM FILE DESCRIPTOR USAGE ==="
+        awk '{
+          printf "allocated=%s unused=%s maximum=%s usage_percent=%.2f%%\n",
+                 $1, $2, $3, ($3 > 0 ? $1 * 100 / $3 : 0)
+        }' /proc/sys/fs/file-nr
+        echo "=== KERNEL MAXIMUM ==="
+        cat /proc/sys/fs/file-max
+        echo "=== TOP PROCESSES BY OPEN DESCRIPTORS ==="
+        for process_dir in /proc/[0-9]*; do
+          pid="${process_dir##*/}"
+          descriptor_count=$(find "$process_dir/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+          if [ "$descriptor_count" -gt 0 ]; then
+            process_name=$(awk '/^Name:/ {print $2}' "$process_dir/status" 2>/dev/null)
+            process_limit=$(awk '/^Max open files/ {print $4}' "$process_dir/limits" 2>/dev/null)
+            printf "%10d PID=%-8s LIMIT=%-10s %s\n"               "$descriptor_count" "$pid" "${process_limit:-unknown}" "${process_name:-unknown}"
+          fi
+        done | sort -nr | head -n 20
+      args:
+        executable: /bin/bash
+      register: descriptor_investigation
+      changed_when: false
+      failed_when: false
+
+    - name: Show descriptor evidence
+      ansible.builtin.debug:
+        var: descriptor_investigation.stdout_lines
