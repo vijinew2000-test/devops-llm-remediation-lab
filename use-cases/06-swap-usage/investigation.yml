@@ -1,0 +1,37 @@
+---
+- name: Investigate swap usage
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Collect memory and swap summary
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "=== FREE ==="
+        free -m
+        echo "=== ACTIVE SWAP ==="
+        swapon --show --bytes
+        echo "=== VMSTAT ==="
+        vmstat 1 5
+        echo "=== TOP PROCESSES BY SWAP (KB) ==="
+        for status_file in /proc/[0-9]*/status; do
+          awk '
+            /^Name:/ { name=$2 }
+            /^Pid:/ { pid=$2 }
+            /^VmSwap:/ {
+              if ($2 > 0) {
+                printf "%12d KB  PID=%-8s %s\n", $2, pid, name
+              }
+            }
+          ' "$status_file" 2>/dev/null
+        done | sort -nr | head -n 20
+      args:
+        executable: /bin/bash
+      register: swap_investigation
+      changed_when: false
+      failed_when: false
+
+    - name: Show swap evidence
+      ansible.builtin.debug:
+        var: swap_investigation.stdout_lines
