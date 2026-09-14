@@ -1,0 +1,31 @@
+---
+- name: Prepare a controlled swap-usage simulation
+  hosts: lab
+  gather_facts: true
+
+  vars:
+    allow_simulation: false
+    simulation_duration_seconds: 60
+    simulation_memory_mb: 128
+
+  tasks:
+    - name: Require explicit lab opt-in
+      ansible.builtin.assert:
+        that:
+          - allow_simulation | bool
+          - inventory_hostname in groups['lab']
+          - simulation_memory_mb | int > 0
+          - simulation_memory_mb | int <= 256
+          - simulation_duration_seconds | int > 0
+          - simulation_duration_seconds | int <= 120
+          - ansible_memavailable_mb | int > (simulation_memory_mb | int * 2)
+        fail_msg: >-
+          Blocked: run only on an isolated host in the lab group. The requested
+          memory must be at most 256 MB and less than half the available RAM.
+
+    - name: Show the reviewed simulation parameters
+      ansible.builtin.debug:
+        msg:
+          - "Memory allocation: {{ simulation_memory_mb }} MB"
+          - "Duration: {{ simulation_duration_seconds }} seconds"
+          - "Simulation execution is intentionally left for a reviewed lab role."
