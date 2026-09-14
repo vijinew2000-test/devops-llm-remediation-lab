@@ -1,0 +1,29 @@
+---
+- name: Perform approved file descriptor remediation
+  hosts: all
+  gather_facts: false
+  become: true
+
+  vars:
+    allow_remediation: false
+    approved_remediation_action: "none"
+    target_service: ""
+
+  tasks:
+    - name: Require explicit human approval
+      ansible.builtin.assert:
+        that:
+          - allow_remediation | bool
+          - approved_remediation_action != "none"
+          - target_service | length > 0
+        fail_msg: >-
+          Blocked: identify the affected process, confirm whether usage is a leak
+          or valid load, document impact and rollback, and specify the target service.
+
+    - name: Show the approved remediation
+      ansible.builtin.debug:
+        msg:
+          - "Target service: {{ target_service }}"
+          - "Approved action: {{ approved_remediation_action }}"
+          - "Use a reviewed service-specific role; do not kill arbitrary processes."
+          - "A limit increase requires evidence that the workload is valid and leak-free."
