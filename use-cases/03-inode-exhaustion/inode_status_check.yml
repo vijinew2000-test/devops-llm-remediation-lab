@@ -1,0 +1,44 @@
+---
+- name: Check Linux Inode Status
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  vars:
+    filesystem: "/"
+
+  tasks:
+
+    - name: Get inode status
+      ansible.builtin.command:
+        cmd: df -P -i {{ filesystem }}
+      register: inode_status
+      changed_when: false
+
+    - name: Get disk status
+      ansible.builtin.command:
+        cmd: df -P -h {{ filesystem }}
+      register: disk_status
+      changed_when: false
+
+    - name: Get system-wide file table
+      ansible.builtin.command:
+        cmd: cat /proc/sys/fs/file-nr
+      register: file_table
+      changed_when: false
+
+    - name: Get maximum system file descriptors
+      ansible.builtin.command:
+        cmd: cat /proc/sys/fs/file-max
+      register: file_max
+      changed_when: false
+
+    - name: Display inode status
+      ansible.builtin.debug:
+        msg:
+          status_type: "inode_status"
+          filesystem: "{{ filesystem }}"
+          inode_status: "{{ inode_status.stdout_lines }}"
+          disk_status: "{{ disk_status.stdout_lines }}"
+          system_file_table: "{{ file_table.stdout | trim }}"
+          system_file_max: "{{ file_max.stdout | trim }}"
