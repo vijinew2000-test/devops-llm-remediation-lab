@@ -1,19 +1,86 @@
 ---
-- name: Investigate inode exhaustion
+- name: Inode Exhaustion Investigation
   hosts: all
-  gather_facts: true
-  become: true
-  tasks:
-    - name: Collect inode exhaustion evidence
-      ansible.builtin.shell: |
-        set -o pipefail
-        df -Pi && find /var/tmp -xdev -type f 2>/dev/null | head -n 1000 | wc -l
-      args:
-        executable: /bin/bash
-      register: investigation
-      changed_when: false
-      failed_when: false
+  become: yes
+  gather_facts: no
 
-    - name: Show sanitized evidence
+  vars:
+    filesystem: "/"
+    top_count: 5
+
+  tasks:
+
+    - name: Check filesystem inode usage
+      ansible.builtin.command:
+        cmd: df -P -i {{ filesystem }}
+      register: inode_usage
+      changed_when: false
+
+    - name: Check filesystem disk usage
+      ansible.builtin.command:
+        cmd: df -P -h {{ filesystem }}
+      register: disk_usage
+      changed_when: false
+
+    - name: Get inode usage percentage
+      ansible.builtin.shell:
+        cmd: |
+          df -P -i {{ filesystem }} |
+          awk 'NR==2 {
+            gsub("%","",$5);
+            print $5
+          }'
+      register: inode_percent
+      changed_when: false
+
+    - name: Find top directories by file count
+      ansible.builtin.shell:
+        cmd: |
+          for dir in /var /tmp /home /opt /usr; do
+            if [ -d "$dir" ]; then
+              count=$(find "$dir" -xdev -type f 2>/dev/null | wc -l)
+              echo "$count $dir"
+            fi
+          done | sort -nr | head -n {{ top_count }}
+      register: top_directories
+      changed_when: false
+
+    - name: Find top files by size
+      ansible.builtin.shell:
+        cmd: |
+          find {{ filesystem }} -xdev -type f \
+          -printf '%s %p\n' 2>/dev/null |
+          sort -nr |
+          head -n {{ top_count }}
+      register: top_files
+      changed_when: false
+
+    - name: Find large log files
+      ansible.builtin.shell:
+        cmd: |
+          find /var/log -xdev -type f \
+          \( -name "*.log" -o -name "*.log.*" \) \
+          -printf '%s %p\n' 2>/dev/null |
+          sort -nr |
+          head -n {{ top_count }}
+      register: log_files
+      changed_when: false
+
+    - name: Get filesystem mount information
+      ansible.builtin.command:
+        cmd: findmnt {{ filesystem }}
+      register: mount_info
+      changed_when: false
+
+    - name: Generate investigation result
       ansible.builtin.debug:
-        var: investigation.stdout_lines
+        msg:
+          investigation_type: "inode_exhaustion"
+          filesystem: "{{ filesystem }}"
+          inode_usage_percent: "{{ inode_percent.stdout | trim }}"
+          inode_usage: "{{ inode_usage.stdout_lines }}"
+          disk_usage: "{{ disk_usage.stdout_lines }}"
+          top_directories_by_file_count: "{{ top_directories.stdout_lines }}"
+          top_files: "{{ top_files.stdout_lines }}"
+          top_log_files: "{{ log_files.stdout_lines }}"
+          mount_info: "{{ mount_info.stdout_lines }}"
