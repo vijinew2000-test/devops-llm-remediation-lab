@@ -1,0 +1,98 @@
+---
+- name: Inode Exhaustion Remediation
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  vars:
+    remediation_action: "cleanup_temp_files"
+
+    approved_cleanup_paths:
+      - "/tmp/inode-exhaustion-test"
+
+    cleanup_age_days: 7
+
+  tasks:
+
+    - name: Validate remediation action
+      ansible.builtin.assert:
+        that:
+          - remediation_action in
+            [
+              "cleanup_temp_files"
+            ]
+        fail_msg: "Remediation action is not approved."
+
+    - name: Validate cleanup directory
+      ansible.builtin.assert:
+        that:
+          - cleanup_path is defined
+          - cleanup_path in approved_cleanup_paths
+        fail_msg: "Cleanup path is not approved."
+
+    - name: Check inode usage before remediation
+      ansible.builtin.shell:
+        cmd: |
+          df -P -i / |
+          awk 'NR==2 {
+            gsub("%","",$5);
+            print $5
+          }'
+      register: inode_before
+      changed_when: false
+
+    - name: Count files before cleanup
+      ansible.builtin.shell:
+        cmd: |
+          find "{{ cleanup_path }}" -type f 2>/dev/null | wc -l
+      register: files_before
+      changed_when: false
+
+    - name: Remove approved old temporary files
+      ansible.builtin.shell:
+        cmd: |
+          find "{{ cleanup_path }}" \
+            -type f \
+            -mtime +{{ cleanup_age_days }} \
+            -delete
+      when: remediation_action == "cleanup_temp_files"
+
+    - name: Wait before validation
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Check inode usage after remediation
+      ansible.builtin.shell:
+        cmd: |
+          df -P -i / |
+          awk 'NR==2 {
+            gsub("%","",$5);
+            print $5
+          }'
+      register: inode_after
+      changed_when: false
+
+    - name: Count remaining files
+      ansible.builtin.shell:
+        cmd: |
+          find "{{ cleanup_path }}" -type f 2>/dev/null | wc -l
+      register: files_after
+      changed_when: false
+
+    - name: Generate remediation result
+      ansible.builtin.debug:
+        msg:
+          remediation_action: "{{ remediation_action }}"
+          cleanup_path: "{{ cleanup_path }}"
+          inode_before: "{{ inode_before.stdout | trim }}"
+          inode_after: "{{ inode_after.stdout | trim }}"
+          files_before: "{{ files_before.stdout | trim }}"
+          files_after: "{{ files_after.stdout | trim }}"
+          status: >-
+            {{
+              'REMEDIATION_COMPLETED'
+              if (inode_after.stdout | trim | int)
+                 < (inode_before.stdout | trim | int)
+              else
+              'REMEDIATION_REVIEW_REQUIRED'
+            }}
