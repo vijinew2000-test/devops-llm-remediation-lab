@@ -1,0 +1,60 @@
+---
+- name: Analyze Existing Inode Alert
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  vars:
+    filesystem: "/"
+    alert_threshold: 50
+
+  tasks:
+
+    - name: Get current inode usage
+      ansible.builtin.shell:
+        cmd: |
+          df -P -i {{ filesystem }} |
+          awk 'NR==2 {
+            gsub("%","",$5);
+            print $5
+          }'
+      register: current_inode_usage
+      changed_when: false
+
+    - name: Get inode details
+      ansible.builtin.command:
+        cmd: df -P -i {{ filesystem }}
+      register: inode_details
+      changed_when: false
+
+    - name: Determine whether alert condition exists
+      ansible.builtin.set_fact:
+        alert_condition_active: >-
+          {{
+            (current_inode_usage.stdout | trim | int)
+            >=
+            (alert_threshold | int)
+          }}
+
+    - name: Get top file-count directories
+      ansible.builtin.shell:
+        cmd: |
+          for dir in /var /tmp /home /opt /usr; do
+            if [ -d "$dir" ]; then
+              count=$(find "$dir" -xdev -type f 2>/dev/null | wc -l)
+              echo "$count $dir"
+            fi
+          done | sort -nr | head -n 5
+      register: file_count_directories
+      changed_when: false
+
+    - name: Generate alert analysis input
+      ansible.builtin.debug:
+        msg:
+          analysis_type: "inode_alert"
+          filesystem: "{{ filesystem }}"
+          current_inode_usage: "{{ current_inode_usage.stdout | trim }}"
+          configured_threshold: "{{ alert_threshold }}"
+          alert_condition_active: "{{ alert_condition_active }}"
+          inode_details: "{{ inode_details.stdout_lines }}"
+          top_file_count_directories: "{{ file_count_directories.stdout_lines }}"
