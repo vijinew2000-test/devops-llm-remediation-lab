@@ -7,16 +7,15 @@
   vars:
     test_dir: "/tmp/inode-exhaustion-test"
     file_count: 100000
-    auto_cleanup_seconds: 300
 
   tasks:
 
-    - name: Remove previous test directory if present
+    - name: Remove previous test directory
       ansible.builtin.file:
         path: "{{ test_dir }}"
         state: absent
 
-    - name: Create safe test directory
+    - name: Create test directory
       ansible.builtin.file:
         path: "{{ test_dir }}"
         state: directory
@@ -30,40 +29,23 @@
       args:
         executable: /bin/bash
 
-    - name: Count created test files
+    - name: Count created files
       ansible.builtin.shell:
         cmd: "find {{ test_dir }} -type f | wc -l"
       register: test_file_count
       changed_when: false
 
-    - name: Check inode usage after simulation
-      ansible.builtin.shell:
-        cmd: "df -P -i /"
+    - name: Check inode usage
+      ansible.builtin.command:
+        cmd: df -P -i /
       register: inode_usage
       changed_when: false
 
     - name: Display simulation result
       ansible.builtin.debug:
         msg:
-          - "Inode exhaustion simulation completed."
+          - "INODE SIMULATION COMPLETED"
           - "Test directory: {{ test_dir }}"
           - "Files created: {{ test_file_count.stdout }}"
           - "Current inode usage:"
           - "{{ inode_usage.stdout }}"
-
-    - name: Schedule automatic safety cleanup
-      ansible.builtin.shell: |
-        (
-          sleep {{ auto_cleanup_seconds }}
-          rm -rf "{{ test_dir }}"
-        ) >/dev/null 2>&1 &
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    - name: Final message
-      ansible.builtin.debug:
-        msg: >-
-          Created controlled inode test files under {{ test_dir }}.
-          Automatic safety cleanup is scheduled after
-          {{ auto_cleanup_seconds }} seconds.
