@@ -1,19 +1,13 @@
 ---
-- name: Investigate service down
+- name: Check Docker Container Status
   hosts: all
-  gather_facts: true
-  become: true
-  tasks:
-    - name: Collect service down evidence
-      ansible.builtin.shell: |
-        set -o pipefail
-        systemctl --no-pager --full status {{ target_service | quote }}
-      args:
-        executable: /bin/bash
-      register: investigation
-      changed_when: false
-      failed_when: false
+  gather_facts: no
 
-    - name: Show sanitized evidence
-      ansible.builtin.debug:
-        var: investigation.stdout_lines
+  tasks:
+    - name: Check all container status
+      shell: docker ps -a
+      register: container_status
+
+    - name: Display container status
+      debug:
+        var: container_status.stdout_lines
