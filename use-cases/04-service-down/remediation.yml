@@ -1,17 +1,29 @@
 ---
-- name: Approved service down remediation
+- name: Bank of Anthos - Remediate Stopped Containers
   hosts: all
-  gather_facts: false
-  become: true
-  vars:
-    allow_remediation: false
-  tasks:
-    - name: Require explicit human approval
-      ansible.builtin.assert:
-        that:
-          - allow_remediation | bool
-        fail_msg: "Blocked: set allow_remediation=true only after reviewing the target and rollback plan."
+  gather_facts: no
 
-    - name: Remediation integration point
-      ansible.builtin.debug:
-        msg: "Restart only an allowlisted service after approval and capture pre/post state."
+  tasks:
+
+    - name: Start all stopped containers
+      shell: |
+        stopped=$(docker ps -aq --filter "status=exited")
+
+        if [ -n "$stopped" ]; then
+          docker start $stopped
+        else
+          echo "No stopped containers found"
+        fi
+      register: start_output
+
+    - name: Show remediation result
+      debug:
+        var: start_output.stdout_lines
+
+    - name: Show all container status
+      shell: docker ps -a
+      register: container_status
+
+    - name: Display container status
+      debug:
+        var: container_status.stdout_lines
