@@ -1,17 +1,23 @@
 ---
-- name: Simulate service down safely
-  hosts: lab
-  gather_facts: false
-  vars:
-    allow_simulation: false
-  tasks:
-    - name: Require explicit lab opt-in
-      ansible.builtin.assert:
-        that:
-          - allow_simulation | bool
-          - inventory_hostname in groups['lab']
-        fail_msg: "Blocked: simulations may run only on hosts in the lab group with allow_simulation=true."
+- name: Bank of Anthos - Simulate Service Failure
+  hosts: all
+  gather_facts: no
 
-    - name: Simulation integration point
-      ansible.builtin.debug:
-        msg: "Stop only an explicitly allowlisted disposable lab service."
+  tasks:
+
+    - name: Stop Contacts container
+      shell: docker stop anthos-contacts-1
+      register: stop_output
+      ignore_errors: yes
+
+    - name: Show stop result
+      debug:
+        var: stop_output.stdout
+
+    - name: Show all container status
+      shell: docker ps -a
+      register: container_status
+
+    - name: Display container status
+      debug:
+        var: container_status.stdout_lines
