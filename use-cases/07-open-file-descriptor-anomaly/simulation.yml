@@ -5,7 +5,7 @@
   gather_facts: no
 
   vars:
-    fd_count: 900
+    fd_count: 800
     simulator_script: "/tmp/ofd_simulator.sh"
     pid_file: "/tmp/ofd_simulator.pid"
 
@@ -16,8 +16,8 @@
         if [ -f "{{ pid_file }}" ]; then
           old_pid=$(cat "{{ pid_file }}")
           kill "$old_pid" 2>/dev/null || true
-          rm -f "{{ pid_file }}"
         fi
+        rm -f "{{ pid_file }}"
       changed_when: false
 
     - name: Create OFD simulator script
@@ -29,12 +29,15 @@
 
           FD_COUNT={{ fd_count }}
 
-          for i in $(seq 1 "$FD_COUNT"); do
-              eval "exec $((9+i))<>/dev/null"
-          done
-
+          # Record PID before opening descriptors
           echo $$ > "{{ pid_file }}"
 
+          # Open many file descriptors
+          for i in $(seq 1 "$FD_COUNT"); do
+              eval "exec $((10 + i))<>/dev/null"
+          done
+
+          # Keep descriptors open
           while true; do
               sleep 60
           done
@@ -42,7 +45,7 @@
     - name: Start OFD simulator
       ansible.builtin.shell:
         cmd: "nohup {{ simulator_script }} >/tmp/ofd_simulator.log 2>&1 &"
-      async: 10
+      async: 5
       poll: 0
 
     - name: Wait for PID file
@@ -58,6 +61,11 @@
     - name: Set simulator PID
       ansible.builtin.set_fact:
         simulator_pid: "{{ simulator_pid_raw.content | b64decode | trim }}"
+
+    - name: Check simulator is running
+      ansible.builtin.command:
+        cmd: "kill -0 {{ simulator_pid }}"
+      changed_when: false
 
     - name: Check simulator FD count
       ansible.builtin.shell:
