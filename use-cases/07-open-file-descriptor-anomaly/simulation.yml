@@ -5,11 +5,20 @@
   gather_facts: no
 
   vars:
-    fd_count: 5000
+    fd_count: 900
     simulator_script: "/tmp/ofd_simulator.sh"
     pid_file: "/tmp/ofd_simulator.pid"
 
   tasks:
+
+    - name: Stop previous simulator if running
+      ansible.builtin.shell: |
+        if [ -f "{{ pid_file }}" ]; then
+          old_pid=$(cat "{{ pid_file }}")
+          kill "$old_pid" 2>/dev/null || true
+          rm -f "{{ pid_file }}"
+        fi
+      changed_when: false
 
     - name: Create OFD simulator script
       ansible.builtin.copy:
@@ -21,7 +30,7 @@
           FD_COUNT={{ fd_count }}
 
           for i in $(seq 1 "$FD_COUNT"); do
-              eval "exec $((1000+i))<>/dev/null"
+              eval "exec $((9+i))<>/dev/null"
           done
 
           echo $$ > "{{ pid_file }}"
@@ -31,8 +40,8 @@
           done
 
     - name: Start OFD simulator
-      ansible.builtin.shell: |
-        nohup "{{ simulator_script }}" >/tmp/ofd_simulator.log 2>&1 &
+      ansible.builtin.shell:
+        cmd: "nohup {{ simulator_script }} >/tmp/ofd_simulator.log 2>&1 &"
       async: 10
       poll: 0
 
@@ -52,7 +61,7 @@
 
     - name: Check simulator FD count
       ansible.builtin.shell:
-        cmd: "ls /proc/{{ simulator_pid }}/fd | wc -l"
+        cmd: "ls /proc/{{ simulator_pid }}/fd 2>/dev/null | wc -l"
       register: simulator_fd_count
       changed_when: false
 
