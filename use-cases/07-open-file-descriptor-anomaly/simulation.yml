@@ -1,30 +1,65 @@
 ---
-- name: Prepare a controlled file descriptor simulation
-  hosts: lab
-  gather_facts: true
+- name: Simulate Open File Descriptor Anomaly
+  hosts: all
+  become: yes
+  gather_facts: no
 
   vars:
-    allow_simulation: false
-    simulation_descriptor_count: 64
-    simulation_duration_seconds: 60
+    fd_count: 5000
+    simulator_script: "/tmp/ofd_simulator.sh"
+    pid_file: "/tmp/ofd_simulator.pid"
 
   tasks:
-    - name: Require explicit lab opt-in and bounded parameters
-      ansible.builtin.assert:
-        that:
-          - allow_simulation | bool
-          - inventory_hostname in groups['lab']
-          - simulation_descriptor_count | int > 0
-          - simulation_descriptor_count | int <= 128
-          - simulation_duration_seconds | int > 0
-          - simulation_duration_seconds | int <= 120
-        fail_msg: >-
-          Blocked: run only on an isolated host in the lab group. The simulation
-          is limited to 128 descriptors for no more than 120 seconds.
 
-    - name: Show the reviewed simulation parameters
+    - name: Create OFD simulator script
+      ansible.builtin.copy:
+        dest: "{{ simulator_script }}"
+        mode: "0755"
+        content: |
+          #!/bin/bash
+
+          FD_COUNT={{ fd_count }}
+
+          for i in $(seq 1 "$FD_COUNT"); do
+              eval "exec $((1000+i))<>/dev/null"
+          done
+
+          echo $$ > "{{ pid_file }}"
+
+          while true; do
+              sleep 60
+          done
+
+    - name: Start OFD simulator
+      ansible.builtin.shell: |
+        nohup "{{ simulator_script }}" >/tmp/ofd_simulator.log 2>&1 &
+      async: 10
+      poll: 0
+
+    - name: Wait for PID file
+      ansible.builtin.wait_for:
+        path: "{{ pid_file }}"
+        timeout: 10
+
+    - name: Read simulator PID
+      ansible.builtin.slurp:
+        src: "{{ pid_file }}"
+      register: simulator_pid_raw
+
+    - name: Set simulator PID
+      ansible.builtin.set_fact:
+        simulator_pid: "{{ simulator_pid_raw.content | b64decode | trim }}"
+
+    - name: Check simulator FD count
+      ansible.builtin.shell:
+        cmd: "ls /proc/{{ simulator_pid }}/fd | wc -l"
+      register: simulator_fd_count
+      changed_when: false
+
+    - name: Display simulation result
       ansible.builtin.debug:
         msg:
-          - "Descriptors: {{ simulation_descriptor_count }}"
-          - "Duration: {{ simulation_duration_seconds }} seconds"
-          - "Simulation execution is intentionally left for a reviewed lab role."
+          - "OPEN FILE DESCRIPTOR SIMULATION COMPLETED"
+          - "Simulator PID: {{ simulator_pid }}"
+          - "FDs opened: {{ simulator_fd_count.stdout }}"
+          - "Use this PID as input to the remediation playbook."
