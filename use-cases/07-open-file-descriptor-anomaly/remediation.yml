@@ -1,5 +1,5 @@
 ---
-- name: Open File Descriptor Remediation
+- name: Process Remediation
   hosts: all
   become: yes
   gather_facts: no
@@ -14,29 +14,32 @@
         that:
           - remediation_pid | string | length > 0
           - remediation_pid | string is match('^[0-9]+$')
-        fail_msg: "Provide remediation_pid from the investigation output."
+        fail_msg: "Provide a valid process PID using -e remediation_pid=<PID>"
 
     - name: Get process information
       ansible.builtin.shell:
-        cmd: "ps -p {{ remediation_pid }} -o pid=,comm=,args="
+        cmd: "ps -p {{ remediation_pid }} -o pid=,user=,comm=,args="
       register: process_info
       changed_when: false
 
-    - name: Verify this is the OFD simulator
+    - name: Display process to be remediated
+      ansible.builtin.debug:
+        msg: "{{ process_info.stdout }}"
+
+    - name: Check that process exists
       ansible.builtin.assert:
         that:
-          - "'ofd_simulator.py' in process_info.stdout"
-        fail_msg: >
-          PID {{ remediation_pid }} is not the expected OFD simulator.
-          Remediation stopped for safety.
+          - process_info.stdout | trim != ""
+        fail_msg: "PID {{ remediation_pid }} is not running."
 
     - name: Get FD count before remediation
       ansible.builtin.shell:
         cmd: "ls /proc/{{ remediation_pid }}/fd 2>/dev/null | wc -l"
       register: fd_before
       changed_when: false
+      failed_when: false
 
-    - name: Stop OFD simulator
+    - name: Stop process
       ansible.builtin.command:
         cmd: "kill {{ remediation_pid }}"
 
@@ -55,14 +58,13 @@
       ansible.builtin.assert:
         that:
           - process_after.stdout | trim == ""
-        success_msg: "OFD remediation successful. Simulator process was stopped."
-        fail_msg: "OFD remediation failed. Process is still running."
+        success_msg: "Process {{ remediation_pid }} was stopped successfully."
+        fail_msg: "Process {{ remediation_pid }} is still running."
 
     - name: Display remediation result
       ansible.builtin.debug:
         msg:
-          - "OFD REMEDIATION COMPLETED"
+          - "PROCESS REMEDIATION COMPLETED"
           - "PID: {{ remediation_pid }}"
           - "FD count before remediation: {{ fd_before.stdout }}"
           - "Process stopped successfully."
-          - "Open file descriptor anomaly caused by the simulator has been removed."
