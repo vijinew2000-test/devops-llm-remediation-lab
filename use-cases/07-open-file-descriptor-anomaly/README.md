@@ -23,8 +23,8 @@ Increasing a limit may hide an application leak. Check whether descriptor counts
 1. Simulation
 
 Book: ofd-simulation.yml
+ansible-playbook -i 'localhost,' -c local ofd-simulation.yml
 
-ansible-playbook -i inventory ofd-simulation.yml
 
 After it completes, note the Simulator PID.
 
@@ -32,8 +32,8 @@ After it completes, note the Simulator PID.
 
 Book: ofd-investigation.yml
 
-ansible-playbook -i inventory ofd-investigation.yml
 
+ansible-playbook -i 'localhost,' -c local ofd-investigation.yml
 Look for the simulator PID in:
 
 top_fd_processes
@@ -48,8 +48,9 @@ So here the PID is 24581.
 
 Book: ofd-remediation.yml
 
-Pass the PID from the investigation:
-
+#Pass the PID from the investigation:
+ansible-playbook -i 'localhost,' -c local ofd-remediation.yml -e "remediation_pid=5142"
 ansible-playbook -i inventory ofd-remediation.yml -e "remediation_pid=24581"
+ansible-playbook -i 'localhost,' -c local ofd-remediation.yml -e "remediation_pid=5142"
 
-Replace 24581 with whatever PID your investigation finds.
+#Replace 24581 with whatever PID your investigation finds.
