@@ -4,79 +4,48 @@
   become: yes
   gather_facts: no
 
-  vars:
-    fd_count: 800
-    simulator_script: "/tmp/ofd_simulator.sh"
-    pid_file: "/tmp/ofd_simulator.pid"
-
   tasks:
 
-    - name: Stop previous simulator if running
-      ansible.builtin.shell: |
-        if [ -f "{{ pid_file }}" ]; then
-          old_pid=$(cat "{{ pid_file }}")
-          kill "$old_pid" 2>/dev/null || true
-        fi
-        rm -f "{{ pid_file }}"
-      changed_when: false
-
-    - name: Create OFD simulator script
+    - name: Create OFD simulator
       ansible.builtin.copy:
-        dest: "{{ simulator_script }}"
+        dest: /tmp/ofd_simulator.py
         mode: "0755"
         content: |
-          #!/bin/bash
+          import time
 
-          FD_COUNT={{ fd_count }}
+          files = []
 
-          # Record PID before opening descriptors
-          echo $$ > "{{ pid_file }}"
+          for i in range(300):
+              files.append(open("/dev/null", "r"))
 
-          # Open many file descriptors
-          for i in $(seq 1 "$FD_COUNT"); do
-              eval "exec $((10 + i))<>/dev/null"
-          done
-
-          # Keep descriptors open
-          while true; do
-              sleep 60
-          done
+          while True:
+              time.sleep(60)
 
     - name: Start OFD simulator
       ansible.builtin.shell:
-        cmd: "nohup {{ simulator_script }} >/tmp/ofd_simulator.log 2>&1 &"
-      async: 5
-      poll: 0
+        cmd: "nohup python3 /tmp/ofd_simulator.py >/tmp/ofd_simulator.log 2>&1 &"
+      changed_when: true
 
-    - name: Wait for PID file
-      ansible.builtin.wait_for:
-        path: "{{ pid_file }}"
-        timeout: 10
+    - name: Wait for simulator
+      ansible.builtin.pause:
+        seconds: 2
 
-    - name: Read simulator PID
-      ansible.builtin.slurp:
-        src: "{{ pid_file }}"
-      register: simulator_pid_raw
-
-    - name: Set simulator PID
-      ansible.builtin.set_fact:
-        simulator_pid: "{{ simulator_pid_raw.content | b64decode | trim }}"
-
-    - name: Check simulator is running
-      ansible.builtin.command:
-        cmd: "kill -0 {{ simulator_pid }}"
+    - name: Find simulator PID
+      ansible.builtin.shell:
+        cmd: "pgrep -f '/tmp/ofd_simulator.py' | head -1"
+      register: simulator_pid
       changed_when: false
 
-    - name: Check simulator FD count
+    - name: Show simulation result
       ansible.builtin.shell:
-        cmd: "ls /proc/{{ simulator_pid }}/fd 2>/dev/null | wc -l"
+        cmd: "ls /proc/{{ simulator_pid.stdout }}/fd | wc -l"
       register: simulator_fd_count
       changed_when: false
 
-    - name: Display simulation result
+    - name: Display result
       ansible.builtin.debug:
         msg:
-          - "OPEN FILE DESCRIPTOR SIMULATION COMPLETED"
-          - "Simulator PID: {{ simulator_pid }}"
-          - "FDs opened: {{ simulator_fd_count.stdout }}"
-          - "Use this PID as input to the remediation playbook."
+          - "OFD SIMULATION CREATED"
+          - "PID: {{ simulator_pid.stdout }}"
+          - "Process: /tmp/ofd_simulator.py"
+          - "Open FDs: {{ simulator_fd_count.stdout }}"
